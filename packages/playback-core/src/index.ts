@@ -963,12 +963,14 @@ export const setupMux = (
       | 'customDomain'
       | 'disableCookies'
       | 'disableTracking'
+      | 'muxDataSDK'
+      | 'muxDataSDKOptions'
     >
   >,
   mediaEl: HTMLMediaElement,
   hlsjs?: HlsInterface
 ) => {
-  const { envKey: env_key, disableTracking } = props;
+  const { envKey: env_key, disableTracking, muxDataSDK = mux, muxDataSDKOptions = {} } = props;
   const inferredEnv = isMuxVideoSrc(props);
 
   if (!disableTracking && (env_key || inferredEnv)) {
@@ -998,7 +1000,7 @@ export const setupMux = (
       return error;
     };
 
-    mux.monitor(mediaEl, {
+    muxDataSDK.monitor(mediaEl, {
       debug,
       beaconCollectionDomain,
       hlsjs,
@@ -1006,6 +1008,7 @@ export const setupMux = (
       automaticErrorTracking: false,
       errorTranslator: muxEmbedErrorTranslator,
       disableCookies,
+      ...muxDataSDKOptions,
       data: {
         ...(env_key ? { env_key } : {}),
         // Metadata fields
