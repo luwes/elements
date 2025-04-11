@@ -1,4 +1,11 @@
-import type { ValueOf, PlaybackCore, MuxMediaProps, MuxMediaPropsInternal, MuxMediaPropTypes } from './types';
+import type {
+  ValueOf,
+  PlaybackEngine,
+  Autoplay,
+  MuxMediaProps,
+  MuxMediaPropsInternal,
+  MuxMediaPropTypes,
+} from './types';
 import mux, { ErrorEvent } from 'mux-embed';
 import Hls from './hls';
 import type { HlsInterface } from './hls';
@@ -62,6 +69,86 @@ export {
   parseJwt,
 };
 export * from './types';
+
+// NOTE: Exporting for testing
+export const muxMediaState: WeakMap<
+  HTMLMediaElement,
+  Partial<MuxMediaProps> & { seekable?: TimeRanges; liveEdgeStartOffset?: number }
+> = new WeakMap();
+
+// TODO: remove unneeded initialize function, use new PlaybackCore() directly.
+export const initialize = (props: Partial<MuxMediaPropsInternal>, mediaEl: HTMLMediaElement, core?: PlaybackCore) => {
+  // Automatically tear down previously initialized mux data & hls instance if it exists.
+  core?.destroy();
+  return new PlaybackCore(props, mediaEl);
+};
+
+export class PlaybackCore {
+  engine?: PlaybackEngine;
+  setPreload: (preload?: HTMLMediaElement['preload']) => void;
+  setAutoplay: (autoplay?: Autoplay) => void;
+
+  #mediaEl: HTMLMediaElement;
+
+  constructor(props: Partial<MuxMediaPropsInternal>, mediaEl: HTMLMediaElement) {
+    this.#mediaEl = mediaEl;
+
+    // NOTE: metadata should never be nullish/nil. Adding here for type safety due to current type defs.
+    const { metadata = {} } = props;
+    const { view_session_id = generateUUID() } = metadata;
+    const video_id = toVideoId(props);
+    metadata.view_session_id = view_session_id;
+    metadata.video_id = video_id;
+    props.metadata = metadata;
+
+    // Used to signal DRM Type to Mux Data. See, e.g. `getDRMConfig()`
+    const drmTypeCb = (drmType?: string) => {
+      mediaEl.mux?.emit('hb', { view_drm_type: drmType });
+    };
+
+    props.drmTypeCb = drmTypeCb;
+
+    muxMediaState.set(mediaEl as HTMLMediaElement, {});
+    const nextHlsInstance = setupHls(props, mediaEl);
+    this.setPreload = setupPreload(props as Pick<MuxMediaProps, 'preload' | 'src'>, mediaEl, nextHlsInstance);
+
+    setupMux(props, mediaEl, nextHlsInstance);
+    loadMedia(props, mediaEl, nextHlsInstance);
+    setupCuePoints(mediaEl);
+    setupChapters(mediaEl);
+
+    this.setAutoplay = setupAutoplay(props as Pick<MuxMediaProps, 'autoplay'>, mediaEl, nextHlsInstance);
+  }
+
+  destroy() {
+    const hls = this?.engine;
+    if (hls) {
+      hls.detachMedia();
+      hls.destroy();
+    }
+
+    const mediaEl = this.#mediaEl;
+    if (mediaEl?.mux && !mediaEl.mux.deleted) {
+      mediaEl.mux.destroy();
+      delete mediaEl.mux;
+    }
+
+    if (mediaEl) {
+      mediaEl.removeAttribute('src');
+      mediaEl.load();
+      mediaEl.removeEventListener('error', handleNativeError);
+      mediaEl.removeEventListener('error', handleInternalError);
+      mediaEl.removeEventListener('durationchange', seekInSeekableRange);
+      muxMediaState.delete(mediaEl);
+      mediaEl.dispatchEvent(new Event('teardown'));
+    }
+  }
+}
+
+// TODO: remove unneeded teardown function, use core.destroy() directly.
+export const teardown = (_mediaEl?: HTMLMediaElement | null, core?: PlaybackCore) => {
+  core?.destroy();
+};
 
 const DRMType = {
   FAIRPLAY: 'fairplay',
@@ -286,12 +373,6 @@ const isAndroidLike =
   userAgentStr.toLowerCase().includes('android') ||
   ['x11', 'android'].some((platformStr) => userAgentPlatform.toLowerCase().includes(platformStr));
 
-// NOTE: Exporting for testing
-export const muxMediaState: WeakMap<
-  HTMLMediaElement,
-  Partial<MuxMediaProps> & { seekable?: TimeRanges; liveEdgeStartOffset?: number }
-> = new WeakMap();
-
 const MUX_VIDEO_DOMAIN = 'mux.com';
 const MSE_SUPPORTED = Hls.isSupported?.();
 const DEFAULT_PREFER_MSE = isAndroidLike;
@@ -504,61 +585,6 @@ export const getEnded = (
   // Externalize conversion to boolean for "under-determined cases" here (See isStuckOnLastFragment() for details)
   if (hls && !!isStuckOnLastFragment(mediaEl, hls)) return true;
   return isPseudoEnded(mediaEl);
-};
-
-export const initialize = (props: Partial<MuxMediaPropsInternal>, mediaEl: HTMLMediaElement, core?: PlaybackCore) => {
-  // Automatically tear down previously initialized mux data & hls instance if it exists.
-  teardown(mediaEl, core);
-  // NOTE: metadata should never be nullish/nil. Adding here for type safety due to current type defs.
-  const { metadata = {} } = props;
-  const { view_session_id = generateUUID() } = metadata;
-  const video_id = toVideoId(props);
-  metadata.view_session_id = view_session_id;
-  metadata.video_id = video_id;
-  props.metadata = metadata;
-
-  // Used to signal DRM Type to Mux Data. See, e.g. `getDRMConfig()`
-  const drmTypeCb = (drmType?: string) => {
-    mediaEl.mux?.emit('hb', { view_drm_type: drmType });
-  };
-
-  props.drmTypeCb = drmTypeCb;
-
-  muxMediaState.set(mediaEl as HTMLMediaElement, {});
-  const nextHlsInstance = setupHls(props, mediaEl);
-  const setPreload = setupPreload(props as Pick<MuxMediaProps, 'preload' | 'src'>, mediaEl, nextHlsInstance);
-  setupMux(props, mediaEl, nextHlsInstance);
-  loadMedia(props, mediaEl, nextHlsInstance);
-  setupCuePoints(mediaEl);
-  setupChapters(mediaEl);
-  const setAutoplay = setupAutoplay(props as Pick<MuxMediaProps, 'autoplay'>, mediaEl, nextHlsInstance);
-
-  return {
-    engine: nextHlsInstance,
-    setAutoplay,
-    setPreload,
-  };
-};
-
-export const teardown = (mediaEl?: HTMLMediaElement | null, core?: PlaybackCore) => {
-  const hls = core?.engine;
-  if (hls) {
-    hls.detachMedia();
-    hls.destroy();
-  }
-  if (mediaEl?.mux && !mediaEl.mux.deleted) {
-    mediaEl.mux.destroy();
-    delete mediaEl.mux;
-  }
-  if (mediaEl) {
-    mediaEl.removeAttribute('src');
-    mediaEl.load();
-    mediaEl.removeEventListener('error', handleNativeError);
-    mediaEl.removeEventListener('error', handleInternalError);
-    mediaEl.removeEventListener('durationchange', seekInSeekableRange);
-    muxMediaState.delete(mediaEl);
-    mediaEl.dispatchEvent(new Event('teardown'));
-  }
 };
 
 /**

@@ -23,13 +23,6 @@ type MetaData = Metadata;
 export type PlaybackEngine = Hls;
 export type MuxDataSDK = Mux;
 
-export type PlaybackCore = {
-  engine?: PlaybackEngine;
-  muxDataSDK?: MuxDataSDK;
-  setAutoplay: (autoplay?: Autoplay) => void;
-  setPreload: (preload?: HTMLMediaElement['preload']) => void;
-};
-
 // TODO add INVIEW_MUTED, INVIEW_ANY
 export type AutoplayTypes = {
   ANY: 'any';
