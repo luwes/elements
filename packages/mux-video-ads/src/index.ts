@@ -231,19 +231,12 @@ video::-webkit-media-text-track-container {
   }
 
   onEnded() {
-    //TODO: this is a hack to prevent the play event from being called twice but we are able to propagate the event to the parent
-    this.dispatchEvent(new CustomEvent('ended', { composed: true, bubbles: true }));
     if (this.adTagUrl && this.#muxAdManager?.isReadyForComplete()) {
       this.#muxAdManager.contentComplete();
     }
   }
 
   play() {
-    //TODO: this is a hack to prevent the play event from being called twice but we are able to propagate the event to the parent
-    this.removeEventListener('play', this.play);
-    this.dispatchEvent(new CustomEvent('play', { composed: true, bubbles: true }));
-    this.addEventListener('play', this.play);
-
     if (this.adTagUrl && this.adBreak) {
       if (this.#muxAdManager?.isAdPaused()) {
         this.#muxAdManager?.resumeAdManager();
@@ -274,11 +267,6 @@ video::-webkit-media-text-track-container {
   }
 
   pause(): void {
-    //TODO: this is a hack to prevent the play event from being called twice but we are able to propagate the event to the parent
-    this.removeEventListener('pause', this.pause);
-    this.dispatchEvent(new CustomEvent('pause', { composed: true, bubbles: true }));
-    this.addEventListener('pause', this.pause);
-
     if (this.adBreak) {
       this.#muxAdManager?.pauseAdManager();
     }
