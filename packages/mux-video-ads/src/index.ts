@@ -5,7 +5,7 @@ import MuxVideoElement from '@mux/mux-video';
 // @ts-ignore
 import mux from '@mux/mux-data-google-ima';
 import { MuxAdManagerConfig, MuxAdManager } from './ads-manager';
-// import type { MuxDataSDK } from '@mux/playback-core';
+import type { MuxDataSDK } from '@mux/playback-core';
 
 const serializeAttributes = (attrs = {}) => {
   return (
@@ -349,9 +349,9 @@ video::-webkit-media-text-track-container {
     return super.requestPictureInPicture();
   }
 
-  // get muxDataSDK() {
-  //   return mux as MuxDataSDK;
-  // }
+  get muxDataSDK() {
+    return mux as MuxDataSDK;
+  }
 
   get muxDataSDKOptions() {
     return {

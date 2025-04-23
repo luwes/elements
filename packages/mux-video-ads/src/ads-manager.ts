@@ -90,7 +90,7 @@ export class MuxAdManager {
         if (this.isMSE()) {
           console.log('MSE pause');
           this.#customMediaElement._teardownHls();
-        } else if (this.isNative()) {
+        } else {
           console.log('Native pause');
           this.#customMediaElement.src = '';
           this.#customMediaElement.load();
@@ -108,7 +108,7 @@ export class MuxAdManager {
           if (this.isMSE()) {
             console.log('MSE Resume');
             this.#customMediaElement._initializeHls();
-          } else if (this.isNative()) {
+          } else {
             console.log('Native Resume');
             this.#customMediaElement.src = this.#videoBackup.originalSrc;
           }
@@ -288,11 +288,7 @@ export class MuxAdManager {
   }
 
   isMSE(): boolean {
-    return this.#customMediaElement.getAttribute('prefer-playback') === 'mse';
-  }
-
-  isNative(): boolean {
-    return this.#customMediaElement.getAttribute('prefer-playback') === 'native';
+    return !!this.#customMediaElement._hls;
   }
 
   updateViewMode(isFullscreen: boolean) {
