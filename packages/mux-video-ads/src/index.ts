@@ -358,6 +358,14 @@ video::-webkit-media-text-track-container {
       imaAdsLoader: this.#muxAdManager?.adsLoader,
     };
   }
+
+  set muxDataKeepSession(val: boolean) {
+    this.toggleAttribute('mux-data-keep-session', Boolean(val));
+  }
+
+  get muxDataKeepSession(): boolean {
+    return this.hasAttribute('mux-data-keep-session');
+  }
 }
 
 type MuxVideoAdsElementType = typeof MuxVideoAds;
